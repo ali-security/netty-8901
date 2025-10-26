@@ -39,7 +39,7 @@ jobs:
         include:
           - setup: linux-x86_64-java11
             docker-compose-build: "-f docker/docker-compose.yaml -f docker/docker-compose.centos-6.111.yaml build"
-            docker-compose-run: "-f docker/docker-compose.yaml -f docker/docker-compose.centos-6.111.yaml run build"
+            docker-compose-run: "-f docker/docker-compose.yaml -f docker/docker-compose.centos-6.111.yaml run -v ${{ github.workspace }}/extracted-jars:/extracted-jars build"
 
     name: ${{ matrix.setup }}
     steps:
@@ -47,7 +47,7 @@ jobs:
 
       # Cache .m2/repository
       - name: Cache local Maven repository
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         continue-on-error: true
         with:
           path: ~/.m2/repository
@@ -55,12 +55,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-${{ matrix.setup }}-
             ${{ runner.os }}-maven-
-
+            
+      - name: Set up Docker Compose
+        uses: docker/setup-compose-action@v1
+        
       - name: Build docker image
-        run: docker-compose ${{ matrix.docker-compose-build }}
+        run: docker compose ${{ matrix.docker-compose-build }}
 
       - name: Build project without leak detection
-        run: docker-compose ${{ matrix.docker-compose-run }} | tee build.output
+        run: docker compose ${{ matrix.docker-compose-run }} | tee build.output
 
       - name: Checking for test failures
         run: ./.github/scripts/check_build_result.sh build.output
@@ -72,10 +75,8 @@ jobs:
         uses: ./.github/actions/thread-dump-jvms
         if: cancelled()
 
-      - uses: actions/upload-artifact@v3
-        if: ${{ failure() }}
+      - uses: actions/upload-artifact@v4
         with:
           name: target
           path: |
-            **/target/surefire-reports/
-            **/hs_err*.log
+            /extracted-jars/**/*.jar
